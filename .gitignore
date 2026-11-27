@@ -1,0 +1,43 @@
+# Environment & Secrets (MANDATORY)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+id_rsa
+secrets/
+
+# Python & Virtual Environments
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# Runtime Artifacts & Generated Outputs (Keep source dataset tracked)
+*.joblib
+*.pkl
+artifacts/
+outputs/
+reports/
+!clustering_data.csv
+
+# Jupyter Checkpoints
+.ipynb_checkpoints/
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
