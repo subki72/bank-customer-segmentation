@@ -13,7 +13,7 @@ dependencies = [
     "fastapi==0.136.0",
     "httpx==0.28.1",
     "joblib==1.5.3",
-    "numpy==2.4.4",
+    "numpy==2.4.6",
     "pandas==3.0.2",
     "pydantic==2.13.1",
     "scikit-learn==1.8.0",
