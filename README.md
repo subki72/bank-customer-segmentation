@@ -1,58 +1,157 @@
-# Customer Segmentation using PCA & K-Means Clustering
+# Bank Customer Segmentation (PCA + K-Means)
 
-### About The Project
+[![CI Pipeline](https://github.com/subki72/bank-customer-segmentation/actions/workflows/ci.yml/badge.svg)](https://github.com/subki72/bank-customer-segmentation/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.136.0-009688.svg)](https://fastapi.tiangolo.com/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-This project implements an end-to-end machine learning pipeline to segment bank customers based on their Demographics and Financial behavior. Unlike traditional clustering approaches, this project utilizes **Principal Component Analysis (PCA)** to handle high-dimensional data and multicollinearity, ensuring more distinct and interpretable customer segments.
+End-to-end banking customer segmentation platform powered by **Principal Component Analysis (PCA)**, **K-Means Clustering**, business persona profiling, CLI batch execution, and a production-hardened **FastAPI** service.
 
-The goal is to transform raw customer data into actionable business insights, allowing the marketing team to target specific personas (e.g., "High-Net-Worth Seniors" vs. "Young Spenders") effectively.
+---
 
-### Key Features
-* **Unified Analysis**: Integrates demographic and financial data for a 360-degree customer view.
-* **Dimensionality Reduction**: Uses PCA to distill noise and complex features into key components.
-* **Robust Preprocessing**: Includes outlier handling (Z-Score) and specific encoding strategies for ordinal vs. nominal data.
-* **Actionable Profiling**: Translates mathematical clusters into clear business personas.
+## Architecture Overview
 
-### Built With
-* **Python** (Core Logic)
-* **Pandas & NumPy** (Data Manipulation)
-* **Scikit-learn** (PCA, K-Means, Preprocessing)
-* **Seaborn & Matplotlib** (Data Visualization)
-* **Jupyter Notebook**
+The repository uses a **Dual-Mode Non-Breaking Architecture**:
+1. **Interactive Research (`Clustering_Model.ipynb`)**: Preserved and patched in-place so exploratory analysis runs cleanly without data-loss or scaling bugs.
+2. **Production Service & Package (`src/customer_segmentation/` + `main.py`)**: Modular, type-annotated scikit-learn pipeline with FastAPI endpoints (`/health`, `/analyze`, `/segment`), Pydantic v2 validation, structured logging, and multi-stage non-root Docker packaging.
 
-### Dataset
-The model is trained on `clustering_data.csv`, containing customer attributes such as:
-* **Demographics**: Age, Education, Marital Status, Area.
-* **Financials**: Annual Income, Relationship Balance, Product Ownership (Savings, Deposits, Loans).
+```text
+clustering_data.csv / JSON Payload
+        │
+        ▼
+[preprocessing.py] ──▶ Schema Validation ─▶ Group/Global Median Age Imputation
+        │                                ─▶ Two-Sided Z-Score Filter (|z| < 3)
+        │                                ─▶ Ordinal Fallbacks + ColumnTransformer
+        ▼
+[clustering.py]    ──▶ sklearn Pipeline: Preprocessor -> PCA(3) -> KMeans(k)
+        │
+        ▼
+[profiling.py]     ──▶ Segment Persona Ranking + Cross-Sell Product Recommendation
+        │
+        ▼
+[api.py / main.py] ──▶ FastAPI (/health, /analyze, /segment) & CLI (--health, --demo, --serve)
+```
 
-### Methodology
-The project follows a structured Data Science workflow:
+---
 
-1.  **Data Preprocessing**:
-    * **Cleaning**: Handling missing values and duplicates.
-    * **Outlier Removal**: Using Z-Score to remove extreme values that distort clustering.
-    * **Encoding**: Applying **Label Encoding** for ordinal data (e.g., Education Level) and **One-Hot Encoding** for nominal data (e.g., Area).
-    * **Scaling**: Standardizing data using `StandardScaler`.
+## Stage 1 Bugs Identified & Remediated
 
-2.  **Dimensionality Reduction (PCA)**:
-    * Reducing the dataset dimensions (from ~23 features to 3 principal components).
-    * This step addresses the "Curse of Dimensionality" and improves the clustering algorithm's efficiency.
+| Defect | Legacy Behavior | Remediation |
+|---|---|---|
+| **Demographic Erasure** | `data.dropna()` dropped all 4,045 `Janda/Duda` rows (`Usia` is 100% `NaN` in that segment). | Group-aware (`Status_Perkawinan`) + global median `Usia` imputation preserves 100% of `Janda/Duda` records. |
+| **One-Sided Outlier Filter** | `(z_scores < 3).all(axis=1)` missed negative `-3 sigma` outliers and used `%pip install`. | Replaced with two-sided `(np.abs(z_scores) < 3).all(axis=1)` with zero-variance protection. |
+| **Double Standardization** | `StandardScaler` was applied to `X_num` and re-applied to `data_combined` + one-hot columns. | Single-pass `ColumnTransformer` standardizes numeric/ordinal features once and preserves binary one-hot indicators. |
 
-3.  **Model Training**:
-    * Applying **K-Means Clustering** on the PCA-transformed data.
-    * Determining the optimal number of clusters ($k=3$).
+---
 
-4.  **Evaluation & Profiling**:
-    * Validating cluster quality using **Silhouette Score** (~0.39).
-    * Analyzing the centroids to define customer personas (e.g., by Income, Age, and Balance).
+## Project Structure
 
-### Results
-The model successfully identified 3 distinct customer segments. By using PCA, the model achieved a **Silhouette Score of ~0.39**, indicating well-separated clusters suitable for real-world business application.
+```text
+.
+├── .github/
+│   ├── workflows/
+│   │   ├── ci.yml                  # Ruff, Flake8, Pytest (>=75% cov), Semgrep, Docker, Trivy
+│   │   └── release.yml             # Tag-triggered container build & GitHub Release
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── dependabot.yml
+├── docs/
+│   ├── adr/001-pca-kmeans-segmentation.md
+│   └── runbook.md
+├── src/customer_segmentation/
+│   ├── __init__.py
+│   ├── config.py                   # Schema constants & env-driven SegmentationConfig
+│   ├── preprocessing.py            # Imputation, two-sided Z-score, single-pass ColumnTransformer
+│   ├── clustering.py               # PCA + K-Means Pipeline, metrics, synthetic generator
+│   ├── profiling.py                # Cluster persona ranking & cross-sell product selection
+│   └── api.py                      # FastAPI service (/health, /analyze, /segment)
+├── tests/                          # Unit, integration, API, and CLI tests (97%+ coverage)
+├── main.py                         # CLI entrypoint (--health, --demo, --serve)
+├── Clustering_Model.ipynb          # Patched EDA & modeling notebook
+├── clustering_data.csv             # 28,129 banking customer records
+├── Dockerfile                      # Multi-stage python:3.11-slim non-root container
+├── docker-compose.yml
+├── Makefile
+├── pyproject.toml
+├── requirements.txt
+└── .env.example
+```
 
-### How to Run
-1.  Clone this repository.
-2.  Install the required libraries:
-    ```sh
-    pip install pandas numpy scikit-learn matplotlib seaborn
-    ```
-3.  Open `Clustering_Model.ipynb` in Jupyter Notebook.
-4.  Run all cells to execute the pipeline from Preprocessing to Visualization.
+---
+
+## Quickstart
+
+### 1. Local Installation
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+make install
+```
+
+### 2. CLI Execution (100% Offline)
+
+```bash
+# Service health probe
+python main.py --health
+
+# Run segmentation benchmark on local dataset (5,000-row sample)
+python main.py --demo --sample-limit 5000
+
+# Run on full 28,129-row dataset
+python main.py --demo --sample-limit 0
+```
+
+### 3. FastAPI Server & Docker
+
+```bash
+# Local Uvicorn dev server
+make serve
+
+# Containerized execution
+docker compose up --build
+```
+
+---
+
+## API Contract
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/health` | `GET` | Liveness and model readiness status. |
+| `/analyze` | `POST` | Segment submitted customer batch or local `clustering_data.csv` and return metrics + personas. |
+| `/segment` | `POST` | Assign cluster, persona tier, and cross-sell product recommendation for a single customer. |
+
+Example `POST /segment` payload:
+
+```json
+{
+  "GCIF": "G55501",
+  "Area": "Jakarta",
+  "Jalur_Pembukaan": "Aplikasi Digital",
+  "Vintage": "> 4 Tahun",
+  "Usia": null,
+  "Jenis_Kelamin": "Perempuan",
+  "Status_Perkawinan": "Janda/Duda",
+  "Jumlah_Anak": 2,
+  "Pendidikan": "Sarjana",
+  "Produk_Tabungan": 1,
+  "Produk_Deposito": 1,
+  "Produk_Kartu_Kredit": 0,
+  "Produk_Kredit_Rumah": 0,
+  "Produk_Kredit_Kendaraan": 0,
+  "Produk_Kredit_Dana_Tunai": 0,
+  "Pendapatan_Tahunan": 520,
+  "Total_Relationship_Balance": 410000000
+}
+```
+
+---
+
+## Quality & Testing
+
+```bash
+make lint   # Ruff check, Ruff format check, Flake8
+make test   # Pytest suite with >=75% coverage gate
+```
+
+See [docs/runbook.md](docs/runbook.md) for operational troubleshooting and [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
